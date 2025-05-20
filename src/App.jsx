@@ -50,9 +50,9 @@ const App = () => {
   };
 
   const handleDrop = (event) => {
-    event.preventDefault();
-    dragCounter.current = 0; // Reset counter
-    setIsDragOver(false); // Hide drop zone
+     event.preventDefault();
+  dragCounter.current = 0; // Reset counter
+  setIsDragOver(false);
     const files = Array.from(event.dataTransfer.files);
     if (files.length === 0) return;
 
@@ -72,21 +72,25 @@ const App = () => {
     }
   };
 
-  const handleDragOver = (event) => {
-    event.preventDefault();
-    if (dragCounter.current === 0) {
-      setIsDragOver(true); // Show drop zone only on first enter
-    }
-    dragCounter.current += 1; // Increment counter
-  };
+ const handleDragOver = (event) => {
+  event.preventDefault(); // This is necessary to allow dropping
+};
 
   const handleDragLeave = (event) => {
-    event.preventDefault();
-    dragCounter.current -= 1; // Decrement counter
-    if (dragCounter.current === 0) {
-      setIsDragOver(false); // Hide drop zone only when fully left
-    }
-  };
+  event.preventDefault();
+  dragCounter.current -= 1;
+  if (dragCounter.current === 0) {
+    setIsDragOver(false); // Hide drop zone when counter reaches zero
+  }
+};
+  const handleDragEnter = (event) => {
+  event.preventDefault();
+  dragCounter.current += 1;
+  if (dragCounter.current === 1) {
+    setIsDragOver(true); // Show drop zone only on first enter
+  }
+};
+
 
   const closeTexturePopup = () => {
     setShowTexturePopup(false);
@@ -212,9 +216,10 @@ const App = () => {
         {/* 3D Viewer */}
         <div
           className="flex-1 relative"
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
+           onDrop={handleDrop}
+  onDragOver={handleDragOver}
+  onDragEnter={handleDragEnter}
+  onDragLeave={handleDragLeave}
         >
           <Canvas
             shadows
