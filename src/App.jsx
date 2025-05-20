@@ -22,11 +22,11 @@ const App = () => {
   const dragCounter = useRef(0); // Counter to track drag events
 
   //model compression
-    const [optimizationInProgress, setOptimizationInProgress] = useState(false);
-    const [optimizationResults, setOptimizationResults] = useState([]);
-    const [affectedNodes, setAffectedNodes] = useState([]);
-    const [showOptimizationPopup, setShowOptimizationPopup] = useState(false);
-    const [inputFileModel, setInputFileModel] = useState([{ name: modelFile?.name || '' }]);
+  const [optimizationInProgress, setOptimizationInProgress] = useState(false);
+  const [optimizationResults, setOptimizationResults] = useState([]);
+  const [affectedNodes, setAffectedNodes] = useState([]);
+  const [showOptimizationPopup, setShowOptimizationPopup] = useState(false);
+  const [inputFileModel, setInputFileModel] = useState([{ name: modelFile?.name || '' }]);
 
   const sidebarTabs = [
     { id: 'model-compression', icon: Package, label: 'Model Compression' },
@@ -50,9 +50,9 @@ const App = () => {
   };
 
   const handleDrop = (event) => {
-     event.preventDefault();
-  dragCounter.current = 0; // Reset counter
-  setIsDragOver(false);
+    event.preventDefault();
+    dragCounter.current = 0; // Reset counter
+    setIsDragOver(false);
     const files = Array.from(event.dataTransfer.files);
     if (files.length === 0) return;
 
@@ -72,24 +72,24 @@ const App = () => {
     }
   };
 
- const handleDragOver = (event) => {
-  event.preventDefault(); // This is necessary to allow dropping
-};
+  const handleDragOver = (event) => {
+    event.preventDefault(); // This is necessary to allow dropping
+  };
 
   const handleDragLeave = (event) => {
-  event.preventDefault();
-  dragCounter.current -= 1;
-  if (dragCounter.current === 0) {
-    setIsDragOver(false); // Hide drop zone when counter reaches zero
-  }
-};
+    event.preventDefault();
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDragOver(false); // Hide drop zone when counter reaches zero
+    }
+  };
   const handleDragEnter = (event) => {
-  event.preventDefault();
-  dragCounter.current += 1;
-  if (dragCounter.current === 1) {
-    setIsDragOver(true); // Show drop zone only on first enter
-  }
-};
+    event.preventDefault();
+    dragCounter.current += 1;
+    if (dragCounter.current === 1) {
+      setIsDragOver(true); // Show drop zone only on first enter
+    }
+  };
 
 
   const closeTexturePopup = () => {
@@ -127,52 +127,51 @@ const App = () => {
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       {/* Sidebar */}
       {modelFile && (
-      <div className="w-64 h-full bg-white border-r border-gray-200 flex flex-col shadow-sm">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800">Model Editor</h2>
-          {modelFile && (
-            <p className="text-sm text-gray-500 truncate mt-1">{modelFile.name}</p>
-          )}
-        </div>
-        <div className="flex flex-col">
-          {sidebarTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isDisabled = tab.id === 'model-compression' && !modelFile;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => !isDisabled && setSelectedTab(tab.id)}
-                disabled={isDisabled}
-                className={`flex items-center space-x-3 px-4 py-3 text-left transition-colors ${
-                  isDisabled
+        <div className="w-64 h-full bg-white border-r border-gray-200 flex flex-col shadow-sm">
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-800">Model Editor</h2>
+            {modelFile && (
+              <p className="text-sm text-gray-500 truncate mt-1">{modelFile.name}</p>
+            )}
+          </div>
+          <div className="flex flex-col">
+            {sidebarTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isDisabled = tab.id === 'model-compression' && !modelFile;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => !isDisabled && setSelectedTab(tab.id)}
+                  disabled={isDisabled}
+                  className={`flex items-center space-x-3 px-4 py-3 text-left transition-colors ${isDisabled
                     ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
                     : selectedTab === tab.id
                       ? 'bg-blue-50 border-r-2 border-blue-500 text-blue-700'
                       : 'hover:bg-gray-50 text-gray-700'
-                }`}
-                title={
-                  isDisabled
-                    ? 'Upload a model to enable Model Compression'
-                    : ''
-                }
-              >
-                <Icon
-                  size={20}
-                  className={
+                    }`}
+                  title={
                     isDisabled
-                      ? 'text-gray-400'
-                      : selectedTab === tab.id
-                        ? 'text-blue-600'
-                        : 'text-gray-600'
+                      ? 'Upload a model to enable Model Compression'
+                      : ''
                   }
-                />
-                <span className="text-sm font-medium">{tab.label}</span>
-              </button>
-            );
-          })}
+                >
+                  <Icon
+                    size={20}
+                    className={
+                      isDisabled
+                        ? 'text-gray-400'
+                        : selectedTab === tab.id
+                          ? 'text-blue-600'
+                          : 'text-gray-600'
+                    }
+                  />
+                  <span className="text-sm font-medium">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex-1 p-4 overflow-auto">{renderContent()}</div>
         </div>
-        <div className="flex-1 p-4 overflow-auto">{renderContent()}</div>
-      </div>
       )}
 
       {/* Main Content */}
@@ -180,46 +179,44 @@ const App = () => {
         <div className="bg-white border-b p-4 shadow-sm">
           <div className="flex items-center justify-center space-x-4">
             <label
-  className={`flex items-center space-x-2 ${
-    modelFile ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 cursor-pointer hover:bg-blue-600'
-  } text-white px-4 py-2 rounded-lg transition-colors`}
->
-  <Upload size={18} />
-  <span>Upload Model</span>
-  <input
-    type="file"
-    className="hidden"
-    accept=".glb,.gltf,.obj,.fbx"
-    onChange={(e) => handleFileUpload(e, 'model')}
-    disabled={modelFile !== null}
-  />
-</label>
-<label
-  className={`flex items-center space-x-2 ${
-    modelFile ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-500 cursor-pointer hover:bg-green-600'
-  } text-white px-4 py-2 rounded-lg transition-colors`}
->
-  <Upload size={18} />
-  <span>Upload Image</span>
-  <input
-    type="file"
-    className="hidden"
-    accept=".jpg,.jpeg,.png,.webp"
-    onChange={(e) => handleFileUpload(e, 'image')}
-    disabled={modelFile !== null}
-  />
-</label>
-           
+              className={`flex items-center space-x-2 ${modelFile || showTexturePopup ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 cursor-pointer hover:bg-blue-600'
+                } text-white px-4 py-2 rounded-lg transition-colors`}
+            >
+              <Upload size={18} />
+              <span>Upload Model</span>
+              <input
+                type="file"
+                className="hidden"
+                accept=".glb,.gltf,.obj,.fbx"
+                onChange={(e) => handleFileUpload(e, 'model')}
+                disabled={modelFile !== null || showTexturePopup}
+              />
+            </label>
+            <label
+              className={`flex items-center space-x-2 ${modelFile || showTexturePopup ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-500 cursor-pointer hover:bg-green-600'
+                } text-white px-4 py-2 rounded-lg transition-colors`}
+            >
+              <Upload size={18} />
+              <span>Upload Image</span>
+              <input
+                type="file"
+                className="hidden"
+                accept=".jpg,.jpeg,.png,.webp"
+                onChange={(e) => handleFileUpload(e, 'image')}
+                disabled={modelFile !== null || showTexturePopup}
+              />
+            </label>
+
           </div>
         </div>
 
         {/* 3D Viewer */}
         <div
           className="flex-1 relative"
-           onDrop={handleDrop}
-  onDragOver={handleDragOver}
-  onDragEnter={handleDragEnter}
-  onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
         >
           <Canvas
             shadows
@@ -302,34 +299,34 @@ const App = () => {
           {!modelFile && !imageFile && !isDragOver && (
             <>
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                <Upload size={64} className="mx-auto text-gray-300 mb-4" />
-                <p className="text-lg font-medium text-gray-500">Drag & Drop Files Here</p>
-                <p className="text-sm text-gray-400 mt-2">
-                  Or use the upload buttons at the top to select files
-                </p>
+                <div className="text-center p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                  <Upload size={64} className="mx-auto text-gray-300 mb-4" />
+                  <p className="text-lg font-medium text-gray-500">Drag & Drop Files Here</p>
+                  <p className="text-sm text-gray-400 mt-2">
+                    Or use the upload buttons at the top to select files
+                  </p>
+                </div>
               </div>
-            </div>
             </>
           )}
           {showOptimizationPopup && (
             <div className="absolute top-4 right-6 z-10 text-black p-4 rounded-lg shadow-lg">
-            <OptimizationResultsModal
-              optimizationResults={optimizationResults}
-              setOptimizationResults={setOptimizationResults}
-              affectedNodes={affectedNodes}
-              setAffectedNodes={setAffectedNodes}
-              showOptimizationPopup={showOptimizationPopup}
-              setShowOptimizationPopup={setShowOptimizationPopup}
-              inputFileModel={inputFileModel}
-              setInputFileModel={setInputFileModel}
-            />
-          </div>
+              <OptimizationResultsModal
+                optimizationResults={optimizationResults}
+                setOptimizationResults={setOptimizationResults}
+                affectedNodes={affectedNodes}
+                setAffectedNodes={setAffectedNodes}
+                showOptimizationPopup={showOptimizationPopup}
+                setShowOptimizationPopup={setShowOptimizationPopup}
+                inputFileModel={inputFileModel}
+                setInputFileModel={setInputFileModel}
+              />
+            </div>
           )}
 
-          
 
-          
+
+
         </div>
       </div>
     </div>

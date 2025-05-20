@@ -302,12 +302,12 @@ const TextureCompression = ({ imageFile }) => {
           </div>
 
           {/* Optimized Image Preview */}
-          {optimizedImageUrl && (
+          {/* {optimizedImageUrl && (
             <div className="mt-4">
               <h4 className="font-medium text-gray-700 mb-2">Preview</h4>
               <img src={optimizedImageUrl} alt="Optimized preview" className="max-w-full h-auto border rounded" />
             </div>
-          )}
+          )} */}
         </div>
       ) : (
         <p className="text-gray-500">Upload an image to enable optimization settings.</p>
