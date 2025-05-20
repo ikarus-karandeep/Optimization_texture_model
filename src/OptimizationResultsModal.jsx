@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Modal from 'react-responsive-modal';
+// import Modal from 'react-responsive-modal';
 export default function OptimizationResultsModal({
   showOptimizationPopup,
   setShowOptimizationPopup,

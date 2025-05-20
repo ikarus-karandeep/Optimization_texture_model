@@ -16,9 +16,8 @@
     "@types/three": "^0.176.0",
     "browser-image-compression": "^2.0.2",
     "lucide-react": "^0.511.0",
-    "react": "^18.2.0",
-"react-dom": "^18.2.0",
-    "react-responsive-modal": "^6.4.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "tailwindcss": "^4.1.7",
     "three": "^0.176.0"
   },
