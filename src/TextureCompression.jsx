@@ -23,26 +23,40 @@ const TextureCompression = ({ imageFile }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  // Fetch original image size and clean up URLs
+  // Reset all state when imageFile changes
   useEffect(() => {
+    // Clean up previous optimized image URL if it exists
+    if (optimizedImageUrl) {
+      URL.revokeObjectURL(optimizedImageUrl);
+    }
+    
+    // If new image file is provided, set its size
     if (imageFile) {
       setOriginalImageSize(imageFile.size);
     } else {
+      // Reset all state variables if no image is provided
       setOriginalImageSize(null);
       setCompressedImageSize(null);
       setCompressionRatio(null);
-      if (optimizedImageUrl) {
-        URL.revokeObjectURL(optimizedImageUrl);
-        setOptimizedImageUrl(null);
-      }
+      setOptimizedImageUrl(null);
+      setIsOptimizing(false);
+      setOptimizationProgress(0);
+      
+      // Reset optimization settings to defaults
+      setOptimizationSettings({
+        quality: 0.75,
+        maxWidth: 1024,
+        format: 'png',
+      });
     }
+    
     // Clean up on unmount
     return () => {
       if (optimizedImageUrl) {
         URL.revokeObjectURL(optimizedImageUrl);
       }
     };
-  }, [imageFile, optimizedImageUrl]);
+  }, [imageFile]);
 
   // Handle quality (target size) change
   const handleQualityChange = (e) => {
@@ -126,6 +140,10 @@ const TextureCompression = ({ imageFile }) => {
       setCompressedImageSize(optimizedBlob.size);
 
       // Create preview URL
+      // Clean up previous URL if it exists
+      if (optimizedImageUrl) {
+        URL.revokeObjectURL(optimizedImageUrl);
+      }
       const optimizedPreviewUrl = URL.createObjectURL(optimizedBlob);
       setOptimizedImageUrl(optimizedPreviewUrl);
 
@@ -150,8 +168,8 @@ const TextureCompression = ({ imageFile }) => {
     const link = document.createElement('a');
     link.href = optimizedImageUrl;
     const baseName = imageFile.name.split('.').slice(0, -1).join('.');
-const extension = optimizationSettings.format === 'jpeg' ? 'jpg' : optimizationSettings.format;
-link.download = `optimized_${baseName}.${extension}`;
+    const extension = optimizationSettings.format === 'jpeg' ? 'jpg' : optimizationSettings.format;
+    link.download = `optimized_${baseName}.${extension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -237,6 +255,18 @@ link.download = `optimized_${baseName}.${extension}`;
               
               <button
                 className={`flex-1 py-2 px-4 border rounded ${
+                  optimizationSettings.format === 'png'
+                    ? 'bg-orange-500 text-white'
+                    : 'border-gray-300 hover:bg-gray-100'
+                }`}
+                onClick={() => handleFormatChange('png')}
+                disabled={isOptimizing}
+              >
+                PNG
+              </button>
+              
+              <button
+                className={`flex-1 py-2 px-4 border rounded ${
                   optimizationSettings.format === 'webp'
                     ? 'bg-orange-500 text-white'
                     : 'border-gray-300 hover:bg-gray-100'
@@ -247,7 +277,6 @@ link.download = `optimized_${baseName}.${extension}`;
                 WebP
               </button>
             </div>
-            
           </div>
 
           {/* Optimize and Save Buttons */}
@@ -263,16 +292,22 @@ link.download = `optimized_${baseName}.${extension}`;
             </button>
             <button
               className={`flex-1 py-2 px-4 bg-orange-500 text-white rounded ${
-                isOptimizing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-orange-600'
+                !optimizedImageUrl || isOptimizing ? 'opacity-50 cursor-not-allowed' : 'hover:bg-orange-600'
               }`}
               onClick={saveImage}
-              disabled={isOptimizing}
+              disabled={!optimizedImageUrl || isOptimizing}
             >
               Save
             </button>
           </div>
 
           {/* Optimized Image Preview */}
+          {optimizedImageUrl && (
+            <div className="mt-4">
+              <h4 className="font-medium text-gray-700 mb-2">Preview</h4>
+              <img src={optimizedImageUrl} alt="Optimized preview" className="max-w-full h-auto border rounded" />
+            </div>
+          )}
         </div>
       ) : (
         <p className="text-gray-500">Upload an image to enable optimization settings.</p>
