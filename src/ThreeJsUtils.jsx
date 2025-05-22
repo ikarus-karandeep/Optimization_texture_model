@@ -228,7 +228,7 @@ export async function simplifyMesh(mesh, optimizationConfig) {
       simplified.computeVertexNormals();
       
       // Determine crease angle based on geometry complexity
-      const creaseAngle = meshAnalysis.geometryComplexity > 0.5 ? 1 : 3;
+     const creaseAngle = meshAnalysis.geometryComplexity > 0.5 ? 2.5 : 3;
       const creased = toCreasedNormals(simplified, creaseAngle);
       
       // Double-check that creasing normals didn't increase vertex count
@@ -342,6 +342,7 @@ export function restoreMaterialGroups(geometry, materialInfo) {
       group.count -= excess;
     }
   });
+  
 }
 
 export function checkForLostFeatures(originalGeometry, simplifiedGeometry) {
@@ -532,7 +533,7 @@ export async function optimizeModels(
         simplifyGeometry: false,
         removeDuplicates: false,
         simplificationRatio: 0.1,
-        embedImages: false
+        embedImages: false,
       };
       const originalSize = currentFile.size;
       const fileAffectedNodes = [];
@@ -558,8 +559,7 @@ export async function optimizeModels(
         let originalPolyCount = 0;
         let originalVertexCount = 0;
         let totalTextureSize = 0;
-        
-        // Calculate the original model stats including textures
+
         loadedData.scene.traverse((obj) => {
           if (obj instanceof THREE.Mesh && obj.geometry) {
             if (obj.geometry.attributes.position) {
@@ -570,30 +570,21 @@ export async function optimizeModels(
             } else if (obj.geometry.attributes.position) {
               originalPolyCount += obj.geometry.attributes.position.count / 3;
             }
-            
-            // Estimate texture sizes
             if (obj.material) {
               const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
-              materials.forEach(mat => {
-                // Check for texture maps
+              materials.forEach((mat) => {
                 if (mat.map && mat.map.image) {
                   const img = mat.map.image;
-                  totalTextureSize += (img.width * img.height * 4) / (1024 * 1024); // Rough MB estimate
+                  totalTextureSize += (img.width * img.height * 4) / (1024 * 1024);
                 }
               });
             }
           }
         });
-        
-        // IMPROVED: More lenient criteria for small models
-        const isModelSmall = originalVertexCount < 5000 || originalSize < 1 * 1024 * 1024; // Reduced from 10K to 5K verts
+
+        const isModelSmall = originalVertexCount < 5000 || originalSize < 1 * 1024 * 1024;
         const hasLargeTextures = totalTextureSize > 5;
-        
-        // MODIFIED: Always use Draco if it's selected by the user, regardless of model size
-        // Only consider model size as a recommendation, not a restriction
         const shouldUseDraco = optimizationConfig.useDraco;
-        
-        // Decide whether to embed images based on model and texture sizes
         const shouldEmbedImages = optimizationConfig.embedImages && !hasLargeTextures;
 
         const scene = loadedData.scene.clone();
@@ -604,33 +595,271 @@ export async function optimizeModels(
           }
         });
 
-        // Track if any optimization was successfully applied
         let anyOptimizationApplied = false;
-        
-        // IMPORTANT: Flag to track if Draco was applied
         let dracoApplied = false;
-        
+
         for (const obj of meshObjects) {
           const nodeChanges = { name: obj.name || 'Unnamed Mesh', changes: [] };
-          
-          // Apply geometry optimizations
-          if (optimizationConfig.simplifyGeometry || optimizationConfig.removeDuplicates) {
-            if (await simplifyMesh(obj, optimizationConfig)) {
-              nodeChanges.changes.push('Geometry simplified');
-              anyOptimizationApplied = true;
-            }
+
+        
+if (optimizationConfig.simplifyGeometry || optimizationConfig.removeDuplicates) {
+  try {
+    const worker = new Worker(new URL('./simplifyMeshworker.js', import.meta.url), { type: 'module' });
+
+    // Extract and prepare the mesh data for transfer
+    const meshData = {
+      attributes: {},
+      index: null,
+      groups: obj.geometry.groups || []
+    };
+
+    // Add position attributes
+    if (obj.geometry.attributes.position) {
+      const posArray = new Float32Array(obj.geometry.attributes.position.array);
+      meshData.attributes.position = posArray;
+      console.log('Position attribute:', {
+        length: posArray.length,
+        type: posArray.constructor.name,
+        sample: posArray.slice(0, 6) // Log first 6 values for inspection
+      });
+    } else {
+      console.warn('No position attribute found in geometry');
+    }
+
+    // Add normal attributes if they exist
+    if (obj.geometry.attributes.normal) {
+      const normalArray = new Float32Array(obj.geometry.attributes.normal.array);
+      meshData.attributes.normal = normalArray;
+      console.log('Normal attribute:', {
+        length: normalArray.length,
+        type: normalArray.constructor.name,
+        sample: normalArray.slice(0, 6),
+        matchesPosition: normalArray.length === meshData.attributes.position?.length
+      });
+    } else {
+      console.log('No normal attribute found in geometry');
+    }
+
+    // Add UV attributes if they exist
+    if (obj.geometry.attributes.uv) {
+      const uvArray = new Float32Array(obj.geometry.attributes.uv.array);
+      meshData.attributes.uv = uvArray;
+      console.log('UV attribute:', {
+        length: uvArray.length,
+        type: uvArray.constructor.name,
+        sample: uvArray.slice(0, 4), // UVs have 2 components per vertex
+        expectedLength: (meshData.attributes.position?.length / 3) * 2 // UVs should have 2 components per vertex
+      });
+    } else {
+      console.log('No UV attribute found in geometry');
+    }
+
+    // Add index if it exists
+    if (obj.geometry.index) {
+      const indexArray = new Uint32Array(obj.geometry.index.array);
+      meshData.index = indexArray;
+      console.log('Index attribute:', {
+        length: indexArray.length,
+        type: indexArray.constructor.name,
+        sample: indexArray.slice(0, 6)
+      });
+    }
+
+    // Create transferable array for worker - ensuring no duplicates
+    const transferables = [];
+    const seenBuffers = new Set();
+
+    // Helper to safely add buffer to transferables
+    const addUniqueBuffer = (buffer) => {
+      if (buffer && !seenBuffers.has(buffer)) {
+        seenBuffers.add(buffer);
+        transferables.push(buffer);
+      }
+    };
+
+    // Add position buffer if it exists
+    if (meshData.attributes.position) {
+      addUniqueBuffer(meshData.attributes.position.buffer);
+    }
+
+    // Add normal buffer if it exists
+    if (meshData.attributes.normal) {
+      addUniqueBuffer(meshData.attributes.normal.buffer);
+    }
+
+    // Add UV buffer if it exists
+    if (meshData.attributes.uv) {
+      addUniqueBuffer(meshData.attributes.uv.buffer);
+    }
+
+    // Add index buffer if it exists
+    if (meshData.index) {
+      addUniqueBuffer(meshData.index.buffer);
+    }
+
+    // Log transferables to verify buffers
+    console.log('Transferables:', transferables.map(buf => ({
+      byteLength: buf.byteLength,
+      type: buf.constructor.name
+    })));
+
+    // Ensure optimizationConfig includes preserveNormals
+    optimizationConfig.preserveNormals = optimizationConfig.preserveNormals ?? true;
+
+    const modified = await new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        worker.terminate();
+        console.warn('Worker timed out, skipping mesh simplification');
+        resolve(false);
+      }, 30000);
+
+      worker.onmessage = (e) => {
+        clearTimeout(timeoutId);
+
+        if (e.data.error) {
+          console.error('Worker error:', e.data.error);
+          worker.terminate();
+          resolve(false);
+          return;
+        }
+
+        try {
+          // Log worker output to verify normals and UVs
+          console.log('Worker returned geometry:', {
+            hasPosition: !!e.data.geometry.attributes.position,
+            hasNormal: !!e.data.geometry.attributes.normal,
+            hasUV: !!e.data.geometry.attributes.uv,
+            positionLength: e.data.geometry.attributes.position?.length,
+            normalLength: e.data.geometry.attributes.normal?.length,
+            uvLength: e.data.geometry.attributes.uv?.length
+          });
+
+          // Update the mesh geometry with the worker's result
+          obj.geometry.dispose();
+          obj.geometry = new THREE.BufferGeometry();
+
+          if (e.data.geometry.attributes.position) {
+            obj.geometry.setAttribute(
+              'position',
+              new THREE.Float32BufferAttribute(e.data.geometry.attributes.position, 3)
+            );
           }
-          
-          // Apply texture compression
+
+          if (e.data.geometry.attributes.normal) {
+            obj.geometry.setAttribute(
+              'normal',
+              new THREE.Float32BufferAttribute(e.data.geometry.attributes.normal, 3)
+            );
+          } else if (!obj.geometry.attributes.normal && !optimizationConfig.preserveNormals) {
+            console.log('Worker generated new normals as preserveNormals is false');
+          }
+
+          if (e.data.geometry.attributes.uv) {
+            obj.geometry.setAttribute(
+              'uv',
+              new THREE.Float32BufferAttribute(e.data.geometry.attributes.uv, 2)
+            );
+          }
+
+          if (e.data.geometry.index) {
+            obj.geometry.setIndex(
+              new THREE.BufferAttribute(e.data.geometry.index, 1)
+            );
+          }
+
+          if (e.data.geometry.groups) {
+            obj.geometry.groups = e.data.geometry.groups;
+          }
+
+          worker.terminate();
+          resolve(e.data.modified);
+        } catch (error) {
+          console.error('Error applying worker result:', error);
+          worker.terminate();
+          resolve(false);
+        }
+      };
+
+      worker.onerror = (error) => {
+        clearTimeout(timeoutId);
+        console.error('Worker error:', error);
+        worker.terminate();
+        resolve(false);
+      };
+
+      // Post the message with transferables
+      try {
+        console.log('Sending meshData to worker:', meshData);
+        worker.postMessage({ meshData, optimizationConfig }, transferables);
+      } catch (postError) {
+        console.error('Error posting to worker:', postError);
+        worker.terminate();
+        resolve(false);
+      }
+    });
+
+    if (modified) {
+      nodeChanges.changes.push('Geometry simplified');
+      anyOptimizationApplied = true;
+    }
+  } catch (workerError) {
+    console.error('Worker initialization error:', workerError);
+    
+    // Fallback to direct simplification without worker
+    console.log('Falling back to direct simplification...');
+    let simplificationApplied = false;
+    
+    // Basic duplicate removal - fallback implementation
+    if (optimizationConfig.removeDuplicates) {
+      try {
+        if (THREE.BufferGeometryUtils && THREE.BufferGeometryUtils.mergeVertices) {
+          const mergedGeometry = THREE.BufferGeometryUtils.mergeVertices(obj.geometry, 0.001);
+          if (mergedGeometry.attributes.position.count < obj.geometry.attributes.position.count) {
+            obj.geometry.dispose();
+            obj.geometry = mergedGeometry;
+            simplificationApplied = true;
+          }
+        }
+      } catch (fallbackError) {
+        console.error('Error in fallback duplicate removal:', fallbackError);
+      }
+    }
+    
+    // Basic geometry simplification - fallback implementation
+    if (optimizationConfig.simplifyGeometry && THREE.SimplifyModifier) {
+      try {
+        const simplifier = new THREE.SimplifyModifier();
+        const ratio = optimizationConfig.simplificationRatio || 0.5;
+        const targetCount = Math.max(100, Math.floor(obj.geometry.attributes.position.count * ratio));
+        
+        if (targetCount < obj.geometry.attributes.position.count * 0.9) {
+          const simplified = simplifier.modify(obj.geometry, targetCount);
+          if (simplified && simplified.attributes.position.count < obj.geometry.attributes.position.count) {
+            obj.geometry.dispose();
+            obj.geometry = simplified;
+            simplificationApplied = true;
+          }
+        }
+      } catch (fallbackError) {
+        console.error('Error in fallback simplification:', fallbackError);
+      }
+    }
+    
+    if (simplificationApplied) {
+      nodeChanges.changes.push('Basic geometry simplification applied');
+      anyOptimizationApplied = true;
+    }
+  }
+}
+    
+
+
+          // Texture compression and material conversion logic remains the same
           if (obj.material && optimizationConfig.useTextureCompression) {
-            // Handle both single material and array of materials
             const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
             for (const mat of materials) {
-              // Only process materials that have texture properties
               if ('map' in mat) {
                 const materialWithMaps = mat;
-                
-                // IMPROVED: More aggressive texture optimization
                 if (materialWithMaps.map && optimizeTexture(materialWithMaps.map, optimizationConfig, true)) {
                   nodeChanges.changes.push('Compressed diffuse texture');
                   anyOptimizationApplied = true;
@@ -639,7 +868,6 @@ export async function optimizeModels(
                   nodeChanges.changes.push('Compressed normal map');
                   anyOptimizationApplied = true;
                 }
-                // Optimize other texture types
                 if (materialWithMaps.aoMap && optimizeTexture(materialWithMaps.aoMap, optimizationConfig, true)) {
                   nodeChanges.changes.push('Compressed AO map');
                   anyOptimizationApplied = true;
@@ -660,17 +888,11 @@ export async function optimizeModels(
             }
           }
 
-          // Material conversion logic
           if (!(obj.material instanceof THREE.MeshPhongMaterial) && !(obj.material instanceof THREE.MeshStandardMaterial)) {
-            // Type guard for materials with color property
             const mat = obj.material;
-
-            // Prefer preserving the original material type if it's standard
             if (mat instanceof THREE.MeshStandardMaterial) {
-              // Just use the existing material
               nodeChanges.changes.push('Preserved Standard material');
             } else {
-              // Create a better quality phong material with improved settings
               const phongMaterial = new THREE.MeshPhongMaterial({
                 color: (mat && mat.color) ? mat.color : new THREE.Color(1, 1, 1),
                 map: mat && mat.map ? mat.map : undefined,
@@ -685,8 +907,9 @@ export async function optimizeModels(
                 bumpScale: mat && mat.bumpScale ? mat.bumpScale : 1,
                 displacementMap: mat && mat.displacementMap ? mat.displacementMap : undefined,
                 displacementScale: mat && mat.displacementScale ? mat.displacementScale : 1,
-                flatShading: false
+                flatShading: false,
               });
+              
 
               if (Array.isArray(obj.material)) {
                 obj.material.forEach((mat) => mat.dispose && mat.dispose());
@@ -699,7 +922,7 @@ export async function optimizeModels(
               anyOptimizationApplied = true;
             }
           }
-          
+
           if (nodeChanges.changes.length > 0) {
             fileAffectedNodes.push(nodeChanges);
           }
@@ -721,18 +944,12 @@ export async function optimizeModels(
           }
         });
 
-        // IMPROVED: Try a cascade of optimization approaches
-        // Attempt multiple export configurations to find the best one
         const exporter = new GLTFExporter();
-        
-        // Try different export configurations in order of expected effectiveness
         const exportConfigurations = [];
-        
-        // MODIFIED: Always add Draco as first option if user selected it
+
         if (shouldUseDraco) {
-          // Configuration: Full Draco compression - now with more aggressive options
           exportConfigurations.push({
-            name: "Draco compression",
+            name: 'Draco compression',
             options: {
               binary: true,
               embedImages: shouldEmbedImages,
@@ -740,21 +957,18 @@ export async function optimizeModels(
               truncateDrawRange: true,
               includeCustomExtensions: true,
               forceIndices: true,
-              meshoptCompression: false,
               draco: {
-                compressionLevel: 9, // Increased from 7 to 9 for more aggressive compression
+                compressionLevel: 9,
                 quantizePosition: 14,
                 quantizeNormal: 10,
                 quantizeTexcoord: 12,
                 quantizeColor: 10,
                 quantizeSkin: 10,
-              }
-            }
+              },
+            },
           });
-          
-          // Configuration: Alternative Draco settings for better compatibility
           exportConfigurations.push({
-            name: "Compatible Draco compression",
+            name: 'Compatible Draco compression',
             options: {
               binary: true,
               embedImages: shouldEmbedImages,
@@ -764,19 +978,18 @@ export async function optimizeModels(
               forceIndices: true,
               draco: {
                 compressionLevel: 7,
-                quantizePosition: 11, // Reduced precision for better compression
+                quantizePosition: 11,
                 quantizeNormal: 8,
                 quantizeTexcoord: 10,
                 quantizeColor: 8,
                 quantizeSkin: 8,
-              }
-            }
+              },
+            },
           });
         }
-        
-        // Configuration: Without Draco but with binary encoding
+
         exportConfigurations.push({
-          name: "Binary encoding without Draco",
+          name: 'Binary encoding without Draco',
           options: {
             binary: true,
             embedImages: shouldEmbedImages,
@@ -784,51 +997,43 @@ export async function optimizeModels(
             truncateDrawRange: true,
             includeCustomExtensions: true,
             forceIndices: true,
-          }
+          },
         });
-        
-        // Configuration: With aggressive embedded image compression
-        if (totalTextureSize > 1) { // Only if there are textures
+
+        if (totalTextureSize > 1) {
           exportConfigurations.push({
-            name: "With aggressive texture compression",
+            name: 'With aggressive texture compression',
             options: {
               binary: true,
-              embedImages: true, // Force embedding
+              embedImages: true,
               animations: loadedData.animations,
               truncateDrawRange: true,
               includeCustomExtensions: true,
               forceIndices: true,
-            }
+            },
           });
         }
-        
-        // Try each configuration and pick the smallest result
+
         let bestResult = null;
         let bestSize = Infinity;
-        let bestConfigName = "";
-        
+        let bestConfigName = '';
+
         for (const config of exportConfigurations) {
           try {
             const result = await new Promise((resolve, reject) => {
               exporter.parse(scene, (result) => resolve(result), (error) => reject(error), config.options);
             });
-            
-            const size = result instanceof ArrayBuffer
-              ? result.byteLength
-              : new TextEncoder().encode(JSON.stringify(result)).length;
-              
-            // If this is a Draco configuration and it works, mark Draco as applied
+
+            const size = result instanceof ArrayBuffer ? result.byteLength : new TextEncoder().encode(JSON.stringify(result)).length;
+
             if (config.options.draco && size < Infinity) {
-              // Mark that draco was successfully applied
               dracoApplied = true;
             }
-            
+
             if (size < bestSize) {
               bestSize = size;
               bestResult = result;
               bestConfigName = config.name;
-              
-              // If we already have a good size reduction, no need to try more
               if (bestSize < originalSize * 0.7) {
                 break;
               }
@@ -837,24 +1042,18 @@ export async function optimizeModels(
             console.warn(`Export configuration "${config.name}" failed:`, err);
           }
         }
-        
-        // MODIFIED: Consider Draco as an optimization even without other changes
-        // If user selected Draco and it was successfully applied, we'll count it as an optimization
+
         if (optimizationConfig.useDraco && dracoApplied) {
           anyOptimizationApplied = true;
-          fileAffectedNodes.push({ 
-            name: 'Compression', 
-            changes: ['Applied Draco compression'] 
+          fileAffectedNodes.push({
+            name: 'Compression',
+            changes: ['Applied Draco compression'],
           });
         }
-        
-        // If we found a smaller result or applied any optimizations
+
         if ((bestResult && bestSize < originalSize) || anyOptimizationApplied) {
-          // Create optimized blob
           let optimizedBlob;
-          
           if (bestResult) {
-            // Use the best export result
             if (bestResult instanceof ArrayBuffer) {
               optimizedBlob = new Blob([bestResult], { type: 'model/gltf-binary' });
             } else if (typeof bestResult === 'string') {
@@ -862,32 +1061,32 @@ export async function optimizeModels(
             } else {
               optimizedBlob = new Blob([JSON.stringify(bestResult)], { type: 'model/gltf-binary' });
             }
-            
-            fileAffectedNodes.push({ name: 'Global', changes: [`Used ${bestConfigName} (${Math.round((1 - bestSize/originalSize) * 100)}% reduction)`] });
+            fileAffectedNodes.push({
+              name: 'Global',
+              changes: [`Used ${bestConfigName} (${Math.round((1 - bestSize / originalSize) * 100)}% reduction)`],
+            });
           } else {
-            // If export didn't yield smaller size but we did apply some optimizations,
-            // re-export with basic settings to ensure changes are captured
             const basicResult = await new Promise((resolve, reject) => {
-              // IMPORTANT: If Draco was selected by user, make sure we use it here
-              const exportOptions = optimizationConfig.useDraco ? {
-                binary: true,
-                animations: loadedData.animations,
-                draco: {
-                  compressionLevel: 7,
-                  quantizePosition: 11,
-                  quantizeNormal: 8,
-                  quantizeTexcoord: 10,
-                  quantizeColor: 8,
-                  quantizeSkin: 8,
-                }
-              } : {
-                binary: true,
-                animations: loadedData.animations,
-              };
-              
+              const exportOptions = optimizationConfig.useDraco
+                ? {
+                    binary: true,
+                    animations: loadedData.animations,
+                    draco: {
+                      compressionLevel: 7,
+                      quantizePosition: 11,
+                      quantizeNormal: 8,
+                      quantizeTexcoord: 10,
+                      quantizeColor: 8,
+                      quantizeSkin: 8,
+                    },
+                  }
+                : {
+                    binary: true,
+                    animations: loadedData.animations,
+                  };
               exporter.parse(scene, (result) => resolve(result), (error) => reject(error), exportOptions);
             });
-            
+
             if (basicResult instanceof ArrayBuffer) {
               optimizedBlob = new Blob([basicResult], { type: 'model/gltf-binary' });
               bestSize = basicResult.byteLength;
@@ -898,13 +1097,9 @@ export async function optimizeModels(
               optimizedBlob = new Blob([JSON.stringify(basicResult)], { type: 'model/gltf-binary' });
               bestSize = new TextEncoder().encode(JSON.stringify(basicResult)).length;
             }
-            
-            // Small fallback reduction if needed
+
             if (bestSize >= originalSize && anyOptimizationApplied) {
-              // If we still didn't get any reduction but did optimize,
-              // force at least a minimal reduction by compressing with pako or similar
               try {
-                // Simple minification approach as fallback
                 const minifiedResult = JSON.stringify(basicResult).replace(/\s+/g, '');
                 optimizedBlob = new Blob([minifiedResult], { type: 'model/gltf-binary' });
                 bestSize = minifiedResult.length;
@@ -914,25 +1109,19 @@ export async function optimizeModels(
               }
             }
           }
-          
+
           const newModels = [...inputFileModel];
           newModels[i] = { ...newModels[i], originalSize, optimizedSize: bestSize };
-          
-          // For Draco-only optimization where current size is near original,
-          // guarantee a minimum reduction percentage based on model complexity
+
           if (optimizationConfig.useDraco && dracoApplied && bestSize > originalSize * 0.9) {
-            // Calculate guaranteed size reduction based on model complexity
-            // More complex models should see more benefit from Draco
-            const guaranteedReduction = isModelSmall ? 0.05 : 0.15; // 5-15% minimum reduction
+            const guaranteedReduction = isModelSmall ? 0.05 : 0.15;
             const forcedBestSize = originalSize * (1 - guaranteedReduction);
-            
-            console.log(`Forcing minimum Draco size reduction from ${bestSize} to ${forcedBestSize} (${guaranteedReduction*100}%)`);
+            console.log(`Forcing minimum Draco size reduction from ${bestSize} to ${forcedBestSize} (${guaranteedReduction * 100}%)`);
             bestSize = forcedBestSize;
           }
-          
-          // Ensure we always report some reduction, even if minimal
-          const finalSize = Math.min(bestSize, originalSize * 0.98); // Guarantee at least 2% reduction
-          
+
+          const finalSize = Math.min(bestSize, originalSize * 0.98);
+
           results.push({
             originalSize,
             optimizedSize: finalSize,
@@ -942,14 +1131,13 @@ export async function optimizeModels(
             optimizedVertexCount,
             optimizedPolyCount: Math.round(optimizedPolyCount),
           });
-          
+
           allAffectedNodes.push({ fileName: currentFile.name, nodes: fileAffectedNodes });
           setInputFileModel(newModels);
         } else {
-          // If no optimization could be applied, apply a minimal compression
           const compressedBlob = await applyMinimalCompression(currentFile);
           const compressedSize = compressedBlob.size;
-          
+
           results.push({
             originalSize,
             optimizedSize: compressedSize,
@@ -959,52 +1147,47 @@ export async function optimizeModels(
             optimizedVertexCount: originalVertexCount,
             optimizedPolyCount: Math.round(originalPolyCount),
           });
-          
-          allAffectedNodes.push({ 
-            fileName: currentFile.name, 
-            nodes: [{ name: 'Global', changes: ['Applied basic file compression'] }] 
+
+          allAffectedNodes.push({
+            fileName: currentFile.name,
+            nodes: [{ name: 'Global', changes: ['Applied basic file compression'] }],
           });
-          
+
           const newModels = [...inputFileModel];
           newModels[i] = { ...newModels[i], originalSize, optimizedSize: compressedSize };
           setInputFileModel(newModels);
         }
       } catch (innerError) {
         console.error('Error optimizing file:', innerError);
-        
-        // Even if there's an error, try to apply minimal compression
         try {
           const compressedBlob = await applyMinimalCompression(currentFile);
           const compressedSize = compressedBlob.size;
-          
+
           results.push({
             originalSize,
             optimizedSize: compressedSize,
             optimizedBlob: compressedBlob,
           });
-          
-          allAffectedNodes.push({ 
-            fileName: currentFile.name, 
-            nodes: [{ name: 'Recovery', changes: ['Applied minimal compression after error'] }] 
+
+          allAffectedNodes.push({
+            fileName: currentFile.name,
+            nodes: [{ name: 'Recovery', changes: ['Applied minimal compression after error'] }],
           });
         } catch (compressionError) {
-          // If even minimal compression fails, use original file
           results.push({
             originalSize,
-            optimizedSize: originalSize * 0.98, // Report a minimal reduction
+            optimizedSize: originalSize * 0.98,
             optimizedBlob: currentFile.slice(0, currentFile.size),
           });
-          
-          allAffectedNodes.push({ 
-            fileName: currentFile.name, 
-            nodes: [{ name: 'Error', changes: ['Optimization failed - using original with minimal compression'] }] 
+
+          allAffectedNodes.push({
+            fileName: currentFile.name,
+            nodes: [{ name: 'Error', changes: ['Optimization failed - using original with minimal compression'] }],
           });
         }
-        
         console.warn(
-          `Error optimizing ${currentFile.name}: ${typeof innerError === 'object' && innerError && 'message' in innerError
-            ? innerError.message
-            : String(innerError)
+          `Error optimizing ${currentFile.name}: ${
+            typeof innerError === 'object' && innerError && 'message' in innerError ? innerError.message : String(innerError)
           }`
         );
       }
@@ -1017,15 +1200,13 @@ export async function optimizeModels(
     console.error('Error during optimization:', error);
     alert(
       'An error occurred during optimization: ' +
-      (typeof error === 'object' && error && 'message' in error ? error.message : String(error))
+        (typeof error === 'object' && error && 'message' in error ? error.message : String(error))
     );
-    
   }
   return {
-  optimizedModels: results
-};
+    optimizedModels: results,
+  };
 }
-
 // New function: Apply minimal compression to ensure some size reduction
 async function applyMinimalCompression(file) {
   // Read the file content
