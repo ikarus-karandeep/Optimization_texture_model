@@ -89,17 +89,17 @@ async function simplifyMesh(geometry, optimizationConfig) {
 
         let simplificationFactor;
         if (meshAnalysis.geometryComplexity > 0.7) {
-            simplificationFactor = 0.15 * optimizationConfig.simplificationRatio;
-            console.log('Very complex geometry detected - using extremely conservative simplification');
-        } else if (meshAnalysis.geometryComplexity > 0.4) {
-            simplificationFactor = 0.3 * optimizationConfig.simplificationRatio;
-            console.log('Complex geometry detected - using conservative simplification');
-        } else {
-            simplificationFactor = 0.7 * optimizationConfig.simplificationRatio;
-            console.log('Simple geometry detected - using standard simplification');
-        }
+    simplificationFactor = 0.85 * optimizationConfig.simplificationRatio;
+    console.log('Very complex geometry detected - using moderate simplification');
+} else if (meshAnalysis.geometryComplexity > 0.4) {
+    simplificationFactor = 0.95 * optimizationConfig.simplificationRatio;
+    console.log('Complex geometry detected - using aggressive simplification');
+} else {
+    simplificationFactor = 0.98 * optimizationConfig.simplificationRatio;
+    console.log('Simple geometry detected - using very aggressive simplification');
+}
 
-        let targetRatio = Math.max(1 - simplificationFactor, 0.6);
+        let targetRatio = Math.max(1 - simplificationFactor, 0.1);
         let currentTargetRatio = targetRatio;
         let simplificationSuccessful = false;
         let attempts = 0;
@@ -132,7 +132,7 @@ async function simplifyMesh(geometry, optimizationConfig) {
                 if (simplified.attributes.position.count >= originalVertexCount) {
                     console.warn('Simplification increased vertex count, rejecting result');
                     simplified.dispose();
-                    currentTargetRatio = Math.min(currentTargetRatio + 0.1, 0.98);
+                    currentTargetRatio = Math.min(currentTargetRatio + 0.02, 0.98); // was 0.05, smaller steps
                     continue;
                 }
 
@@ -156,14 +156,14 @@ async function simplifyMesh(geometry, optimizationConfig) {
                 originalBox.getSize(originalSize);
                 newBox.getSize(newSize);
 
-                const distortionThreshold = meshAnalysis.isHighDetail ? 0.01 : 0.02;
+                const distortionThreshold = meshAnalysis.isHighDetail ? 0.1 : 0.15; // was 0.05 : 0.08
                 const distortion =
                     Math.abs(newSize.x / originalSize.x - 1) > distortionThreshold ||
                     Math.abs(newSize.y / originalSize.y - 1) > distortionThreshold ||
                     Math.abs(newSize.z / originalSize.z - 1) > distortionThreshold;
 
                 const featureAnalysis = checkForLostFeatures(originalGeometry, simplified);
-                const featureLossThreshold = meshAnalysis.isHighDetail ? 0.1 : 0.15;
+                const featureLossThreshold = meshAnalysis.isHighDetail ? 0.5 : 0.6; // was 0.3 : 0.4
                 const hasLostFeatures = featureAnalysis.lossRatio > featureLossThreshold;
 
                 if (distortion || hasLostFeatures) {
@@ -223,7 +223,7 @@ async function simplifyMesh(geometry, optimizationConfig) {
                 } else {
                     console.warn('Simplification did not reduce vertex count, rejecting result');
                     simplified.dispose();
-                    currentTargetRatio = Math.min(currentTargetRatio + 0.05, 0.98);
+                    currentTargetRatio = Math.min(currentTargetRatio + 0.02, 0.98); // was 0.05, smaller steps
                 }
             } catch (err) {
                 console.warn(`Error during simplification attempt #${attempts}:`, err);

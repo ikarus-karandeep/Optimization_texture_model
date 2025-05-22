@@ -170,21 +170,17 @@ export async function simplifyMesh(mesh, optimizationConfig) {
     let simplificationFactor;
     
     if (meshAnalysis.geometryComplexity > 0.7) {
-      // Very complex geometry - be extremely conservative
-      simplificationFactor = 0.15 * optimizationConfig.simplificationRatio;
-      console.log('Very complex geometry detected - using extremely conservative simplification');
-    } else if (meshAnalysis.geometryComplexity > 0.4) {
-      // Moderately complex geometry - be conservative
-      simplificationFactor = 0.3 * optimizationConfig.simplificationRatio;
-      console.log('Complex geometry detected - using conservative simplification');
-    } else {
-      // Simple geometry - can be more aggressive
-      simplificationFactor = 0.7 * optimizationConfig.simplificationRatio;
-      console.log('Simple geometry detected - using standard simplification');
-    }
+    simplificationFactor = 0.85 * optimizationConfig.simplificationRatio;
+    console.log('Very complex geometry detected - using moderate simplification');
+} else if (meshAnalysis.geometryComplexity > 0.4) {
+    simplificationFactor = 0.95 * optimizationConfig.simplificationRatio;
+    console.log('Complex geometry detected - using aggressive simplification');
+} else {
+    simplificationFactor = 0.98 * optimizationConfig.simplificationRatio;
+    console.log('Simple geometry detected - using very aggressive simplification');
+}
     
-    let targetRatio = 1 - simplificationFactor;
-    targetRatio = Math.max(targetRatio, 0.6); // Never remove more than 40% of vertices
+    let targetRatio = Math.max(1 - simplificationFactor, 0.1);// Never remove more than 40% of vertices
     
     let currentTargetRatio = targetRatio;
     let simplificationSuccessful = false;
@@ -248,7 +244,7 @@ export async function simplifyMesh(mesh, optimizationConfig) {
       newBox.getSize(newSize);
 
       // Stricter distortion check for high detail meshes
-      const distortionThreshold = meshAnalysis.isHighDetail ? 0.01 : 0.02;
+      const distortionThreshold = meshAnalysis.isHighDetail ? 0.5:0.5; // was 0.05 : 0.08
       
       const distortion =
         Math.abs(newSize.x / originalSize.x - 1) > distortionThreshold ||
@@ -258,7 +254,7 @@ export async function simplifyMesh(mesh, optimizationConfig) {
       const featureAnalysis = checkForLostFeatures(originalGeometry, creased);
       
       // More cautious feature loss threshold for high detail meshes
-      const featureLossThreshold = meshAnalysis.isHighDetail ? 0.1 : 0.15;
+      const featureLossThreshold = meshAnalysis.isHighDetail ? 0.9:0.8; // was 0.3 : 0.4
       const hasLostFeatures = featureAnalysis.lossRatio > featureLossThreshold;
 
       if (distortion || hasLostFeatures) {
@@ -268,7 +264,7 @@ export async function simplifyMesh(mesh, optimizationConfig) {
           )}`
         );
 
-        currentTargetRatio = Math.min(currentTargetRatio + 0.05, 0.98);
+        currentTargetRatio = Math.min(currentTargetRatio + 0.02, 0.98); // was 0.05, smaller steps
         simplified.dispose();
         creased.dispose();
 
@@ -303,7 +299,7 @@ export async function simplifyMesh(mesh, optimizationConfig) {
           console.warn('Simplification did not reduce vertex count, rejecting result');
           simplified.dispose();
           creased.dispose();
-          currentTargetRatio = Math.min(currentTargetRatio + 0.05, 0.98);
+          currentTargetRatio = Math.min(currentTargetRatio + 0.02, 0.98); // was 0.05, smaller steps
         }
       }
     }
@@ -360,8 +356,8 @@ export function checkForLostFeatures(originalGeometry, simplifiedGeometry) {
                            thinFeatureLossRatio * 0.45 + 
                            complexityChangeRatio * 0.2;
                            
-  // Adaptive threshold based on geometry complexity
-  const lossThreshold = originalFeatures.isHighDetail ? 0.12 : 0.18;
+  // More permissive threshold based on geometry complexity
+  const lossThreshold = originalFeatures.isHighDetail ? 0.2 : 0.3; // was 0.12 : 0.18
   const featuresLost = combinedLossRatio > lossThreshold;
   
   return { 
@@ -711,7 +707,7 @@ if (optimizationConfig.simplifyGeometry || optimizationConfig.removeDuplicates) 
         worker.terminate();
         console.warn('Worker timed out, skipping mesh simplification');
         resolve(false);
-      }, 30000);
+      }, 60000);
 
       worker.onmessage = (e) => {
         clearTimeout(timeoutId);
