@@ -14,7 +14,10 @@ const ModelCompression = ({ modelFile,
   showOptimizationPopup,
   setShowOptimizationPopup,
   inputFileModel,
-  setInputFileModel, }) => {
+  setInputFileModel,
+wireframe,
+  setWireframe,
+ }) => {
   // State for checkbox selections and slider value
   const [options, setOptions] = useState({
     useDracoCompression: false,
@@ -119,7 +122,15 @@ const handleCompressModel = async () => {
                 />
                 <span className="text-sm text-gray-700">Compress Textures</span>
               </label>
-
+              <label className="flex items-center space-x-2">
+  <input
+    type="checkbox"
+    checked={wireframe}
+    onChange={(e) => setWireframe(e.target.checked)}
+    className="h-4 w-4 text-red-600 border-gray-300 rounded"
+  />
+  <span className="text-sm text-gray-700">Show Wireframe</span>
+</label>
               <label className="flex items-center space-x-2">
                 <input
                   type="checkbox"

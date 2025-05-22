@@ -9,10 +9,26 @@ import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader';
 
 
 // Component to handle model rendering
-const Model = ({ modelFile, setModelInfo, setIsLoading }) => {
+const Model = ({ modelFile, setModelInfo, setIsLoading,wireframe }) => {
   const { scene, camera } = useThree();
   const modelRef = useRef();
   const [model, setModel] = useState(null);
+  // Add this useEffect after the main useEffect (around line 100):
+useEffect(() => {
+  if (model) {
+    model.traverse((child) => {
+      if (child.isMesh && child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((material) => {
+            material.wireframe = wireframe;
+          });
+        } else {
+          child.material.wireframe = wireframe;
+        }
+      }
+    });
+  }
+}, [wireframe, model]);
 
   useEffect(() => {
     if (!modelFile) return;
@@ -26,12 +42,6 @@ const Model = ({ modelFile, setModelInfo, setIsLoading }) => {
       case 'glb':
       case 'gltf':
         loader = GLTFLoader;
-        break;
-      case 'obj':
-        loader = OBJLoader;
-        break;
-      case 'fbx':
-        loader = FBXLoader;
         break;
       default:
         console.error('Unsupported file format');
@@ -70,9 +80,11 @@ const Model = ({ modelFile, setModelInfo, setIsLoading }) => {
               if (Array.isArray(child.material)) {
                 child.material.forEach((material) => {
                   material.side = THREE.DoubleSide;
+                   material.wireframe = wireframe;
                 });
               } else {
                 child.material.side = THREE.DoubleSide;
+                child.material.wireframe = wireframe;
               }
             }
           }

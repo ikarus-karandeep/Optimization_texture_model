@@ -21,12 +21,14 @@ const App = () => {
   const [optimizedModelFile, setOptimizedModelFile] = useState(null);
   const dragCounter = useRef(0); // Counter to track drag events
 
+
   //model compression
   const [optimizationInProgress, setOptimizationInProgress] = useState(false);
   const [optimizationResults, setOptimizationResults] = useState([]);
   const [affectedNodes, setAffectedNodes] = useState([]);
   const [showOptimizationPopup, setShowOptimizationPopup] = useState(false);
   const [inputFileModel, setInputFileModel] = useState([{ name: modelFile?.name || '' }]);
+  const [wireframe, setWireframe] = useState(false);
 
   const sidebarTabs = [
     { id: 'model-compression', icon: Package, label: 'Model Compression' },
@@ -115,6 +117,8 @@ const App = () => {
             setShowOptimizationPopup={setShowOptimizationPopup}
             inputFileModel={inputFileModel}
             setInputFileModel={setInputFileModel}
+            wireframe={wireframe}
+  setWireframe={setWireframe}
           />
 
         );
@@ -243,6 +247,7 @@ const App = () => {
                 modelFile={optimizedModelFile || modelFile}
                 setModelInfo={setModelInfo}
                 setIsLoading={setIsLoading}
+                 wireframe={wireframe}
               />
             </Stage>
           </Canvas>
